@@ -1,0 +1,182 @@
+---
+title: "Google Play Store Apps"
+author: "Vadim Katsemba"
+date: "October 8, 2019"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document:
+    keep_md: yes
+---
+
+# 1. Objective
+### To gather data on applications from the Google Play Store and examine certain charactersitics of the applications.
+
+# 2. Data Preparation
+## 2.1 Importing the data
+### The dataset contains data for applications found on the Google Play Store. The csv file "googleplaystore.csv" is downloaded from Kaggle (https://www.kaggle.com/lava18/google-play-store-apps). We use the read.csv file to load the data into a data frame.
+```{r}
+data <- read.csv("C:\\Users\\vkatz\\Downloads\\googleplaystore.csv")
+```
+### The dataset consists of 12 variables. Variables include rating, number of reviews, size, installs, type, price, content rating and genres.
+
+## 2.2 Data preprocessing
+### The dataset needs to be tweaked before we can start analyzing. First, many factor variables in the data should be numeric, so they shall be converted to numeric. 
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library(tidyverse)
+data <- data %>% mutate(
+  ##Reviews is transformed to numeric.
+  Reviews = as.numeric(levels(data$Reviews)[data$Reviews]),
+  ##To convert Size to numeric, M must be removed
+  Size = gsub("M", "", data$Size),
+  ##Apps that less than 1MB in size are denoted with k, which will be replaced by zero
+  Size = ifelse(grepl("k", Size),0, as.numeric(Size)),
+  ##Eliminate + and , from Installs to convert it to numeric
+  Installs = gsub("\\+", "", as.character(data$Installs)),
+  Installs = as.numeric(gsub(",","", Installs)),
+  ##Remove the currency symbol from Price to convert it to numeric
+  Price = as.numeric(gsub("\\$", "", as.character(data$Price)))
+) %>%
+  ##Remove the two apps in the data that are labelled neither 0 nor NA
+  filter(Type %in% c("Free", "Paid"))
+```
+
+# 3. Analysis
+## 3.1 Category of Applications
+### Let's look at the Categorical Variable Category, to get an idea of which categories of applications are most popular with Google Play Store users.
+```{r echo=TRUE}
+Category <- table(data$Category)
+Category
+```
+
+### We shall plot the data
+```{r echo=TRUE}
+ggplot(data) + geom_bar(aes(x = Category)) + coord_flip()
+```
+
+### As we can see, the Family category is by far the most prevalent, with games and tools also being quite popular. The other categories are fairly diverse in terms of frequency.
+
+## 3.2 Size of Applications
+### Looking at the Size variable, there are applications that do not give a definite size, instead the size of the application varies with the device. We shall use a boxplot to visualize this variable. We shall also use the five number analysis to indicate the quartiles, the median and identify outliers.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library(plotly)
+Sys.setenv("plotly_username" = "Username")
+Sys.setenv("plotly_api_key" = "APIKEY")
+p <- plot_ly(data, x = ~Size, type = "box")
+plotly_IMAGE(p, format = "png", out_file = "sizebox.png")
+```
+
+### The middle 50% of the applications with given sizes fall between 4.9 MB and 30 MB. The median size is 13 MB. But the most interesting observations are the stack of outliers on the far right side of the boxplot. To verify the upper end of the outlier ranges, we shall use the five number summary once again
+```{r echo=TRUE}
+f <- fivenum(data$Size)
+f[4] + 1.5*(f[4] - f[2])
+```
+
+### Applications with a size of greater than 67.65 Megabytes would be considered outliers.
+
+## 3.3 Size of Free and Paid Applications
+### Let's look at the size of the applications once again, but this time we shall use the Type variable to see if there is a difference between the free and paid applications in terms of size.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+p <- plot_ly(data, y = ~Size, color = ~Type, type = "box")
+plotly_IMAGE(p, format = "png", out_file = "SizeTypeBox.png")
+```
+
+### It may seem that there isn't much of a difference between how the applications are spead by size if you look at free and paid applications, but let's use the five number summary to verify.
+```{r echo=TRUE}
+Free_Apps <- data %>% filter(Type == "Free")
+fivenum(Free_Apps$Size)
+ffree <- fivenum(Free_Apps$Size)
+ffree[4] + 1.5*(ffree[4] - ffree[2])
+```
+
+### The free applications (about 93% of the entire dataset) have roughly the same five number summary and upper outlier range as the dataset as a whole. The remaining 7% of the data consists of paid applications, let's examine that subset
+```{r echo=TRUE}
+Paid_Apps <- data %>% filter(Type == "Paid")
+fivenum(Paid_Apps$Size)
+fpaid <- fivenum(Paid_Apps$Size)
+fpaid[4] + 1.5*(fpaid[4] - fpaid[2])
+```
+
+### It's apparent that there was a slight leftward shift in the quartile ranges and medians, when considering paid applications. We also see that the upper end of the outlier range would be 65.65. This suggests that a application with 66 MB in size would be considered an outlier amongst paid applications, but that would not be the case if it was free.
+
+## 3.4 Ratings vs Content Rating
+### Now, we shall examine the ratings variable and see how the it compares to the Content.Rating, which determines the audiences the applications are appropriate for.
+```{r echo=TRUE, warning=FALSE}
+p <- plot_ly(data, y =~Rating, color = ~Content.Rating, type = "box")
+plotly_IMAGE(p, format = "png", out_file = "RatingContentBox.png")
+```
+
+### Aside from the Unrated, and Adults Only ratings, which account for just 3 applications out of the entire dataset, every content rating has outliers to the left side. Of those ratings, the interquartile ranges and median values all seem to be close to one another. This is a strong indication that the rating of the application does not differ much if you examined it through by whether the application is appropriate for certain audiences or not.
+
+## 3.5 Distribution of Ratings
+### We shall examine the distribution of the Ratings variable. It is worth noting, that many applications do not have a rating and are indicated in the dataset as NA. When looking at the mean and standard deviation of the distribution we shall ignore the NA values.
+```{r echo=TRUE, warning=FALSE}
+ggplot(data, aes(x=Rating)) + geom_histogram(bins = 40,color = "black", fill = "Green") + scale_x_continuous(limits = c(1,5)) + geom_vline(aes(xintercept=mean(Rating, na.rm = TRUE)), linetype="dashed", size=1)
+mean(data$Rating, na.rm = TRUE); sd(data$Rating, na.rm = TRUE)
+```
+
+### The distribution here is clearly skewed to the left, but that is largely due to the fact that ratings below 3.2 would be considered outliers. The mean of the distribution is about 4.2 and the most frequent rating is 4.4. This all reflects that applications are more likely to be downloaded if their ratings are higher.
+
+## 3.6 Taking random samples of data to test the CTE
+### To test the Central Limit Theorm, which states that for a non-normal distribution, the means of a sample taken from random samples is normally distributed.
+```{r}
+samples <- 5000
+xbar <- numeric(samples)
+par(mfrow = c(2,2))
+ for (size in c(10, 20, 30, 40)) {
+	for (i in 1:samples) {
+	  xbar[i] <- mean(sample(data$Rating, size = size, 
+              replace = FALSE), na.rm = TRUE)
+
+    }
+
+    hist(xbar, col = "red", prob = TRUE, 
+     breaks = 15, xlim=c(3.5,5), ylim = c(0, 4),
+     main = paste("Sample Size =", size))
+     
+    cat("Sample Size = ", size, " Mean = ", mean(xbar, na.rm = TRUE),
+        " SD = ", sd(xbar, na.rm = TRUE), "\n")
+ }
+```
+
+### When testing the Central Limit Theorem on the Ratings varaible, we can see that as we increase the sample size from 10 to 20 to 30 and 40 for a sample means of 5000 random samples, the mean remains very close the mean of the ratings for the entire dataset of 4.19, while the standard deviation decreases as the sample size increases.
+
+## 3.7 Sampling Methods
+### For simple random sampling without replacement, 1000 Google Play Store applicationms will be selected out of 10841.
+```{r}
+library(sampling)
+s <- srswor(1000, nrow(data))
+simple_sample <- data[s != 0,]
+```
+
+### For a systematic sample, we partition the data into 1000 groups, each group will have 11 selected applications. Starting from the first selected application, every 11th application after the first one will be selected per group.
+```{r}
+k <- ceiling(nrow(data)/1000)
+r <- sample(k,1)
+s <- seq(r, by = k, length = 1000)
+systematic_sample <- data[s,]
+```
+
+### For a stratified sample, we split the data into two groups, based on whether the application is either free or paid. Simple random samples are selected from both groups for a total of 1000 samples.
+```{r}
+st.1 <- strata(data, stratanames = c("Type"), size = rep(500,2), method = "srswor", description = TRUE)
+stratified_sample <- getdata(data, st.1)
+```
+
+### Let's compare the distributions of the population to the three sampling methods
+```{r echo=TRUE, warning=FALSE}
+p1 <- plot_ly(data, x = data$Rating, type = "histogram", name = "Population")
+p2 <- plot_ly(simple_sample, x = simple_sample$Rating, type = "histogram", name = "Simple Random Sampling")
+p3 <- plot_ly(systematic_sample, x = systematic_sample$Rating, type = "histogram", name = "Systematic Sampling")
+p4 <- plot_ly(stratified_sample, x = stratified_sample$Rating, type = "histogram", name = "Stratified Sampling")
+p <- subplot(p1,p2,p3,p4, nrows = 4)
+plotly_IMAGE(p, format = "png", out_file = "PopulationSampling.png")
+```
+
+### Mean and standard deviation of the population and the sampling methods.
+```{r echo=TRUE}
+cat("Population: ", " Mean = ", mean(data$Rating, na.rm = T)," SD = ", sd(data$Rating, na.rm = T), "\n"); cat("Simple Random Sampling: ", " Mean = ", mean(simple_sample$Rating, na.rm = T)," SD = ", sd(simple_sample$Rating, na.rm = T), "\n"); cat("Systematic Sampling: ", " Mean = ", mean(systematic_sample$Rating, na.rm = T)," SD = ", sd(systematic_sample$Rating, na.rm = T), "\n"); cat("Stratified Sampling: ", " Mean = ", mean(stratified_sample$Rating, na.rm = T)," SD = ", sd(stratified_sample$Rating, na.rm = T), "\n")
+```
+
+### Judging from the plots of the distributions, the three sampling methods have roughly the same characteristics as the plot of the population as a whole. Similairly, the mean and standard deviation for every sampling method is very close to those of the population. We can conclude that the sampling methods represent the original data very well and can be used instead of the entire dataset.
